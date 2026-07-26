@@ -1,5 +1,8 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
+// この suite は latent delay の重複登録、retrigger、対象破棄、zero duration、
+// および tick component の real-delta 購読が scaled world 経路へ戻らないことを保証する。
+
 #include "Tests/UnscaledTimeTestHelpers.h"
 #include "Tests/UnscaledTimeTestObjects.h"
 
@@ -55,6 +58,7 @@ bool FUnscaledDelayCompatibilityTest::RunTest(const FString& Parameters)
 		Fixture.PumpFrames(5, 0.1f);
 		Fixture.Subsystem()->RegisterUnscaledDelay(2.0f, false, true, UnscaledTimeDelayTests::MakeLatentInfo(TestObject, 101, 1002));
 		Fixture.ArmPendingTimers();
+		// 元の 1.0s 締切の直前まで進め、非 retriggerable の再登録が deadline を延ばしていないことを確認する。
 		Fixture.PumpFrames(4, 0.1f);
 		Fixture.PumpFrames(1, 0.05f);
 
@@ -91,6 +95,7 @@ bool FUnscaledDelayCompatibilityTest::RunTest(const FString& Parameters)
 		Fixture.PumpFrames(5, 0.1f);
 		Fixture.Subsystem()->RegisterUnscaledDelay(1.0f, true, true, UnscaledTimeDelayTests::MakeLatentInfo(TestObject, 202, 2002));
 		Fixture.ArmPendingTimers();
+		// reset 後の 1.0s 締切直前へ着地させ、元の deadline だけでは発火しないことを切り分ける。
 		Fixture.PumpFrames(9, 0.1f);
 		Fixture.PumpFrames(1, 0.05f);
 
@@ -341,6 +346,7 @@ bool FUnscaledDelayRetriggerClockChangeTest::RunTest(const FString& Parameters)
 		}
 
 		Fixture.SetPaused(false);
+		// unpause 後の unpaused clock を deadline 直前まで進め、paused 中の pump と混ざらないことを確認する。
 		Fixture.PumpFrames(9, 0.1f);
 		Fixture.PumpFrames(1, 0.05f);
 		if (!TestEqual(TEXT("RealTime to unpaused retrigger does not fire before reset unpaused deadline"), TestObject->LatentResumeCount, 0))
@@ -374,6 +380,7 @@ bool FUnscaledDelayRetriggerClockChangeTest::RunTest(const FString& Parameters)
 		Fixture.SetPaused(true);
 		Fixture.Subsystem()->RegisterUnscaledDelay(1.0f, true, true, UnscaledTimeDelayTests::MakeLatentInfo(TestObject, 606, 6002));
 		Fixture.ArmPendingTimers();
+		// RealTime へ移した後の paused 中 deadline 直前へ着地させ、clock 移行後の締切だけを検証する。
 		Fixture.PumpFrames(9, 0.1f);
 		Fixture.PumpFrames(1, 0.05f);
 		if (!TestEqual(TEXT("Unpaused to RealTime retrigger does not fire before reset paused deadline"), TestObject->LatentResumeCount, 0))

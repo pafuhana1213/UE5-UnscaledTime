@@ -27,12 +27,16 @@ void UAbilityTask_UnscaledTick::Activate()
 	UUnscaledTimeSubsystem* Subsystem = World ? UUnscaledTimeSubsystem::Get(World) : nullptr;
 	if (!Subsystem)
 	{
+		// 継続 tick は subsystem delegate が無いと unscaled delta を生成できないため終了する。
+		// WaitUnscaledDelay は一回完了なら world の scaled timer にフォールバックできる、という非対称性は意図的。
+		// fallback timer を持たないので、このタスクには bUsingUnscaledTimer 相当の所有者フラグは不要。
 		UE_LOG(LogUnscaledTimeGAS, Warning, TEXT("UnscaledTick could not find UUnscaledTimeSubsystem for world %s. This ability task will not tick."), *GetNameSafe(World));
 		EndTask();
 		return;
 	}
 
 	RegisteredClock = bTickWhilePaused ? EUnscaledTimeClock::RealTime : EUnscaledTimeClock::RealTimeUnpaused;
+	// 登録時のクロックを保存し、破棄時に同じ delegate から購読を解除する。
 	TickDelegateHandle = Subsystem->GetOnUnscaledTick(RegisteredClock).AddUObject(this, &ThisClass::HandleUnscaledTick);
 }
 

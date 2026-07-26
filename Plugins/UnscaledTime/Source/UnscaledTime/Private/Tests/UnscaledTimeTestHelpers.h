@@ -2,6 +2,9 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+// テスト fixture は実時間 timer の締切を deterministic に検証するため、
+// test world の作成、pause/dilation、frame pump の癖を 1 箇所へ集約する。
+
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
 #include "GameFramework/WorldSettings.h"
@@ -116,6 +119,8 @@ struct FUnscaledTimeTestFixture
 
 	void ArmPendingTimers()
 	{
+		// SetTimer 直後の pending timer は manager の次回 tick で有効化されるため、
+		// warm-up tick とは別に 0 秒 pump して、以後の締切計測を timer 登録後から揃える。
 		PumpFrames(1, 0.f);
 	}
 

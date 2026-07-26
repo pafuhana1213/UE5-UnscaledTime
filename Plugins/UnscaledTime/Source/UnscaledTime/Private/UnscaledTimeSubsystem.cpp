@@ -37,6 +37,8 @@ namespace
 			return;
 		}
 
+		// 0x5554 の固定 prefix と world pointer を組み合わせ、PIE の複数 world が
+		// 同じ on-screen message を上書きしないようにする。
 		const uint64 MessageKey = (uint64(0x5554) << 32) | PointerHash(World);
 		const FString Message = FString::Printf(TEXT("UnscaledTime [%s]: RealTime=%.2f Unpaused=%.2f Delta=%.4f PendingDelays=%d Paused=%s"),
 			*World->GetName(),
@@ -120,16 +122,22 @@ void UUnscaledTimeSubsystem::Tick(float DeltaTime)
 	}
 #endif
 
+	// Tick の DeltaTime は dilation 済みなので時間計測には使わない。
+	// world ごとの real delta を使うと PIE 複数 world と test world の制御に乗せられる。
 	float RealDelta = World->GetTime().GetDeltaRealTimeSeconds();
 	const float MaxDelta = GetDefault<UUnscaledTimeSettings>()->MaxRealDeltaSeconds;
 	if (MaxDelta > 0.f)
 	{
+		// editor break や stall 復帰直後の大きな real delta で、loop timer の catch-up や
+		// callback が 1 frame に集中しないよう実時間側も上限を設ける。
 		RealDelta = FMath::Min(RealDelta, MaxDelta);
 	}
 
 	LastRealDelta = RealDelta;
 	AccumulatedRealTime += RealDelta;
 
+	// RealTime は常に進め、Unpaused は world pause guard の外側で明示的に止める。
+	// 2 本の manager を同じ real delta で tick することで、pause policy だけを分離する。
 	checkf(RealTimeManager.IsValid(), TEXT("RealTimeManager must be valid while UUnscaledTimeSubsystem is initialized."));
 	RealTimeManager->Tick(RealDelta);
 	OnTickRealTime.Broadcast(RealDelta);
@@ -180,6 +188,8 @@ void UUnscaledTimeSubsystem::RegisterUnscaledDelay(float DurationSeconds, bool b
 
 	if (FPendingUnscaledDelay* ExistingDelay = PendingDelays.Find(Key))
 	{
+		// latent Delay と同じく同一 key の非リトリガ呼び出しは無視し、
+		// retriggerable だけ timer と resume 情報を張り直す。
 		if (!bRetriggerable)
 		{
 			return;
@@ -191,6 +201,8 @@ void UUnscaledTimeSubsystem::RegisterUnscaledDelay(float DurationSeconds, bool b
 
 		if (ExistingDelay->Clock != Clock)
 		{
+			// retrigger 時に pause policy が変わる場合は、旧 manager の timer を消してから
+			// handle を無効化し、新しい clock の manager で張り直す。
 			OldTimerManager.ClearTimer(ExistingDelay->TimerHandle);
 			ExistingDelay->TimerHandle.Invalidate();
 			ExistingDelay->Clock = Clock;
@@ -198,6 +210,7 @@ void UUnscaledTimeSubsystem::RegisterUnscaledDelay(float DurationSeconds, bool b
 
 		if (DurationSeconds <= 0.f)
 		{
+			// TimerManager の next-tick セマンティクスに合わせ、次の unscaled timer tick で再開する。
 			if (ExistingDelay->TimerHandle.IsValid())
 			{
 				TimerManager.ClearTimer(ExistingDelay->TimerHandle);
@@ -226,6 +239,7 @@ void UUnscaledTimeSubsystem::RegisterUnscaledDelay(float DurationSeconds, bool b
 
 	if (DurationSeconds <= 0.f)
 	{
+		// TimerManager の next-tick セマンティクスに合わせ、次の unscaled timer tick で再開する。
 		PendingDelay.TimerHandle = TimerManager.SetTimerForNextTick(TimerDelegate);
 	}
 	else
@@ -274,6 +288,8 @@ void UUnscaledTimeSubsystem::OnDelayExpired(FUnscaledDelayKey Key)
 		return;
 	}
 
+	// 標準 latent Delay は world の latent action 経路が pause guard 内で止まる。
+	// ここでは manager 満了後に engine の latent manager と同じ ProcessEvent で再開点を直接発火する。
 	UFunction* Func = Target->FindFunction(Delay.ExecutionFunction);
 	if (!Func)
 	{

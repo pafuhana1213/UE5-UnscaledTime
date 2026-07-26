@@ -1,5 +1,8 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
+// この suite は Blueprint/C++ timer API が選択した unscaled clock へ正しくルーティングされ、
+// dilation、pause、handle 操作、frame 変換、delta clamp の境界を保つことを保証する。
+
 #include "Tests/UnscaledTimeTestHelpers.h"
 #include "Tests/UnscaledTimeTestObjects.h"
 
@@ -64,6 +67,7 @@ bool FUnscaledTimerFiresRealTimeUnderDilationTest::RunTest(const FString& Parame
 		}
 
 		Fixture.ArmPendingTimers();
+		// 1.0s 締切の直前へ着地させ、dilation 値に関係なく早期発火していないことを検証する。
 		Fixture.PumpFrames(9, 0.1f);
 		Fixture.PumpFrames(1, 0.05f);
 		if (!TestEqual(TEXT("Timer does not fire before 1.0 seconds"), TestObject->FireCount, 0))
@@ -159,6 +163,7 @@ bool FUnscaledTimerUnpausedClockStopsWhilePausedTest::RunTest(const FString& Par
 	}
 
 	Fixture.SetPaused(false);
+	// unpaused clock の経過だけで 1.0s 締切直前へ進め、paused 中の pump が残り時間を削っていないことを確認する。
 	Fixture.PumpFrames(9, 0.1f);
 	Fixture.PumpFrames(1, 0.05f);
 	if (!TestEqual(TEXT("Unpaused timer does not fire before 1.0 unpaused seconds"), TestObject->FireCount, 0))
@@ -292,6 +297,7 @@ bool FUnscaledTimerByEventUniqueAcrossClocksTest::RunTest(const FString& Paramet
 	}
 
 	Fixture.SetPaused(false);
+	// 2 回目の by-event 登録を基準に deadline 直前へ進め、古い clock 側の登録が残っていないことを切り分ける。
 	Fixture.PumpFrames(9, 0.1f);
 	Fixture.PumpFrames(1, 0.05f);
 	if (!TestEqual(TEXT("By-event timer does not fire before second registration deadline"), TestObject->FireCount, 0))
@@ -383,6 +389,7 @@ bool FUnscaledTimerFramesUseReferenceFrameRateTest::RunTest(const FString& Param
 			true);
 
 		Fixture.ArmPendingTimers();
+		// 30 frames @ 60fps の 0.5s 締切直前へ着地させ、変換後の timer duration を境界で見る。
 		Fixture.PumpFrames(4, 0.1f);
 		Fixture.PumpFrames(1, 0.05f);
 		if (!TestEqual(TEXT("30-frame timer at 60fps does not fire before 0.5s"), TestObject->FireCount, 0))
@@ -421,6 +428,7 @@ bool FUnscaledTimerFramesUseReferenceFrameRateTest::RunTest(const FString& Param
 			true);
 
 		Fixture.ArmPendingTimers();
+		// 30 frames @ 30fps の 1.0s 締切直前へ着地させ、reference rate 変更が timer に反映されたことを見る。
 		Fixture.PumpFrames(9, 0.1f);
 		Fixture.PumpFrames(1, 0.05f);
 		if (!TestEqual(TEXT("30-frame timer at 30fps does not fire before 1.0s"), TestObject->FireCount, 0))

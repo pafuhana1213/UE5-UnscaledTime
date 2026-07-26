@@ -26,6 +26,7 @@ void UUnscaledTickComponent::Activate(bool bReset)
 
 void UUnscaledTickComponent::Deactivate()
 {
+	// 無効化・unregister・EndPlay・破棄のどの経路でも同じ解除処理に寄せ、二重解除や漏れを防ぐ。
 	UnregisterTickDelegate();
 
 	Super::Deactivate();
@@ -56,6 +57,7 @@ void UUnscaledTickComponent::RegisterTickDelegate()
 {
 	if (TickDelegateHandle.IsValid())
 	{
+		// Activate が複数回呼ばれても購読は 1 本に保つ。
 		return;
 	}
 
@@ -67,6 +69,7 @@ void UUnscaledTickComponent::RegisterTickDelegate()
 	}
 
 	RegisteredClock = bTickWhilePaused ? EUnscaledTimeClock::RealTime : EUnscaledTimeClock::RealTimeUnpaused;
+	// 登録時のクロックを保存しておき、実行中に bTickWhilePaused が変わっても同じ delegate から解除する。
 	TickDelegateHandle = Subsystem->GetOnUnscaledTick(RegisteredClock).AddUObject(this, &UUnscaledTickComponent::HandleUnscaledTick);
 }
 

@@ -18,6 +18,10 @@ class UNSCALEDTIMESAMPLE_API ADemoComparisonActor : public AActor
 public:
 	ADemoComparisonActor();
 
+	/**
+	 * Rotates the vanilla side using the world's scaled tick delta.
+	 * HandleUnscaledTick rotates the paired side from real delta to make the A/B contrast visible.
+	 */
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 

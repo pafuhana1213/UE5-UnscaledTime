@@ -1,6 +1,11 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
+// この suite は GAS ability task が unscaled delay/tick の完了と teardown を維持し、
+// subsystem 不在時の WaitUnscaledDelay / UnscaledTick の分岐差も明示的に検証する。
+
 #include "Tests/UnscaledGASTestClasses.h"
+// GAS module の private test から core module の fixture を共有するため、
+// module 内 include path では解決できない private helper だけ相対パスで参照する。
 #include "../../../UnscaledTime/Private/Tests/UnscaledTimeTestHelpers.h"
 
 #include "AbilitySystemComponent.h"
@@ -50,6 +55,7 @@ bool FAbilityTaskWaitUnscaledDelayRealTimeTest::RunTest(const FString& Parameter
 	}
 
 	Fixture.ArmPendingTimers();
+	// 1.0s の real-time 締切直前へ着地させ、GAS task が global dilation に引きずられていないことを確認する。
 	Fixture.PumpFrames(9, 0.1f);
 	Fixture.PumpFrames(1, 0.05f);
 	if (!TestFalse(TEXT("WaitUnscaledDelay does not finish before 1.0 real seconds"), UUnscaledTimeWaitTestAbility::bFinished))

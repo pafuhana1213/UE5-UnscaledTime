@@ -6,6 +6,7 @@
 #include "HAL/IConsoleManager.h"
 #include "UnscaledTimeLog.h"
 
+// Debug 専用の member 実装をこの TU に分け、shipping 除外と CVar/console command 登録を同じ #if に閉じ込める。
 namespace
 {
 	TAutoConsoleVariable<int32> CVarUnscaledTimeDebug(

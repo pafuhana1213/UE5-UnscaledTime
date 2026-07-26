@@ -21,7 +21,7 @@ class UAbilityTask_UnscaledTick : public UAbilityTask
 
 	UE_API virtual void Activate() override;
 
-	/** Broadcast unscaled ticks while this ability task is active. */
+	/** Broadcasts unscaled tick deltas while this ability task is active. If bTickWhilePaused is true, ticks continue while the world is paused. */
 	UFUNCTION(BlueprintCallable, Category="Ability|Tasks", meta=(HidePin="OwningAbility", DefaultToSelf="OwningAbility", BlueprintInternalUseOnly="TRUE"))
 	static UE_API UAbilityTask_UnscaledTick* UnscaledTick(UGameplayAbility* OwningAbility, bool bTickWhilePaused = true);
 
@@ -31,8 +31,13 @@ protected:
 private:
 	void HandleUnscaledTick(float RealDeltaSeconds);
 
+	/** Active subsystem delegate subscription, used to remove the exact binding on destroy. */
 	FDelegateHandle TickDelegateHandle;
+
+	/** Clock used by the active subscription, cached so teardown removes from the same delegate. */
 	EUnscaledTimeClock RegisteredClock;
+
+	/** Selects whether the task subscribes to the real-time or unpaused tick stream. */
 	bool bTickWhilePaused;
 };
 

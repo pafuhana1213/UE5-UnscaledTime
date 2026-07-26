@@ -13,11 +13,13 @@ namespace
 {
 	float GetUnscaledReferenceFrameRate()
 	{
+		// 設定値が壊れていてもフレーム変換 API がゼロ除算にならないよう、最低 1fps に丸める。
 		return FMath::Max(1.f, GetDefault<UUnscaledTimeSettings>()->ReferenceFrameRate);
 	}
 
 	UUnscaledTimeSubsystem* GetUnscaledTimerSubsystem(const UObject* WorldContextObject, const TCHAR* CallerName)
 	{
+		// BP ノード側では失敗を戻り値で表し、ログには呼び出し元名を残して原因を追えるようにする。
 		UUnscaledTimeSubsystem* Subsystem = UUnscaledTimeSubsystem::Get(WorldContextObject);
 		if (!Subsystem)
 		{
@@ -29,6 +31,7 @@ namespace
 
 	bool IsValidDynamicTimerDelegate(FTimerDynamicDelegate Delegate, const TCHAR* CallerName)
 	{
+		// 動的デリゲート API は vanilla と同じユーザー向け警告経路を使い、無効な bind を黙殺しない。
 		if (Delegate.IsBound())
 		{
 			return true;
@@ -49,6 +52,8 @@ namespace
 
 	bool FindDynamicUnscaledTimer(UUnscaledTimeSubsystem* Subsystem, FTimerDynamicDelegate Delegate, FFoundUnscaledTimer& OutTimer)
 	{
+		// イベント指定ノードは RealTime を先に探すのが公開仕様。両クロックに同じ delegate が残った場合も
+		// tick while paused 側を優先し、既存コメントどおりの「paused 前、unpaused 後」の探索順に揃える。
 		if (!Subsystem)
 		{
 			return false;
@@ -77,6 +82,7 @@ namespace
 
 	UUnscaledTimeSubsystem* GetSubsystemForDynamicDelegate(FTimerDynamicDelegate Delegate, const TCHAR* CallerName)
 	{
+		// イベント指定ノードには WorldContext pin が無いため、delegate の UObject から world を復元する。
 		if (!GEngine)
 		{
 			UE_LOG(LogUnscaledTime, Warning, TEXT("%s could not resolve a world because GEngine is unavailable."), CallerName);

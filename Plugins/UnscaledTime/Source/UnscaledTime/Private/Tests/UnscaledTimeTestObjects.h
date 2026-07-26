@@ -3,6 +3,9 @@
 // Note: no WITH_DEV_AUTOMATION_TESTS guard here — UHT does not allow reflection
 // macros (UCLASS/UPROPERTY/UFUNCTION) inside preprocessor blocks.
 
+// latent resume、timer delegate、unscaled tick の到達先を共有し、
+// 各 suite が engine callback 経路ごとの副作用だけを比較できるようにする。
+
 #include "CoreMinimal.h"
 #include "UObject/Object.h"
 #include "UnscaledTimeTestObjects.generated.h"

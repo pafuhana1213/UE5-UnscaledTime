@@ -43,6 +43,7 @@ void UAbilityTask_WaitUnscaledDelay::Activate()
 
 	if (UUnscaledTimeSubsystem* Subsystem = UUnscaledTimeSubsystem::Get(World))
 	{
+		// subsystem がある通常経路では、handle の所有者と残り時間計算の時計を bUsingUnscaledTimer で記録する。
 		bUsingUnscaledTimer = true;
 		TimeStarted = Subsystem->GetUnscaledTimeSeconds(RegisteredClock);
 		FTimerManager& TimerManager = Subsystem->GetTimerManager(RegisteredClock);
@@ -57,6 +58,8 @@ void UAbilityTask_WaitUnscaledDelay::Activate()
 	}
 	else
 	{
+		// Delay は一回完了すればよいので、subsystem 不在時も警告を出して world の scaled timer にフォールバックする。
+		// 継続 tick タスクは同じ代替セマンティクスを作れないため EndTask() する、という非対称性は意図的。
 		bUsingUnscaledTimer = false;
 		TimeStarted = World->GetTimeSeconds();
 		UE_LOG(LogUnscaledTimeGAS, Warning, TEXT("WaitUnscaledDelay could not find UUnscaledTimeSubsystem for world %s. Falling back to the world timer manager."), *GetNameSafe(World));
@@ -79,6 +82,7 @@ void UAbilityTask_WaitUnscaledDelay::OnDestroy(bool bInOwnerFinished)
 	{
 		if (UWorld* World = GetWorld())
 		{
+			// bUsingUnscaledTimer は TimerHandle をどちらの manager から消すべきかを示す所有者フラグ。
 			if (bUsingUnscaledTimer)
 			{
 				if (UUnscaledTimeSubsystem* Subsystem = UUnscaledTimeSubsystem::Get(World))

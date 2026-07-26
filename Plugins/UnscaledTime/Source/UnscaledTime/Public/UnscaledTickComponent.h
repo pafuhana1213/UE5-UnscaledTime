@@ -13,6 +13,7 @@ class UNSCALEDTIME_API UUnscaledTickComponent : public UActorComponent
 	GENERATED_BODY()
 
 public:
+	/** Creates an unscaled tick component that relies on the subsystem delegate instead of ActorComponent ticking. */
 	UUnscaledTickComponent();
 
 	/** Broadcasts once per unscaled subsystem tick. */
@@ -31,10 +32,18 @@ public:
 	virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override;
 
 private:
+	/** Active subsystem delegate subscription, used to prevent duplicate registration and remove the exact binding. */
 	FDelegateHandle TickDelegateHandle;
+
+	/** Clock used by the active subscription, cached so teardown removes from the same delegate even if settings changed. */
 	EUnscaledTimeClock RegisteredClock = EUnscaledTimeClock::RealTime;
 
+	/** Subscribes to the selected unscaled tick delegate when the component is active and a subsystem exists. */
 	void RegisterTickDelegate();
+
+	/** Clears any active unscaled tick delegate subscription. */
 	void UnregisterTickDelegate();
+
+	/** Relays subsystem tick deltas to Blueprint listeners. */
 	void HandleUnscaledTick(float RealDeltaSeconds);
 };

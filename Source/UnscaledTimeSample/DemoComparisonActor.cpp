@@ -18,6 +18,8 @@ ADemoComparisonActor::ADemoComparisonActor()
 
 	VanillaCounterText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("VanillaCounterText"));
 	VanillaCounterText->SetupAttachment(SceneRoot);
+	// デモ全体の読み比べは Y=-160 を vanilla、Y=+160 を unscaled とする配置規約に依存している。
+	// 対になるテキストとキューブは同じ Y 側へ置き、個別の数値には意味を持たせない。
 	VanillaCounterText->SetRelativeLocation(FVector(0.0f, -160.0f, 160.0f));
 	VanillaCounterText->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
 	VanillaCounterText->SetWorldSize(48.0f);
@@ -101,6 +103,8 @@ void ADemoComparisonActor::Tick(float DeltaSeconds)
 
 	if (VanillaCube)
 	{
+		// A/B 比較の vanilla 側は world Tick の DeltaSeconds を使うため、
+		// global time dilation と pause の影響をそのまま受ける。
 		VanillaCube->AddLocalRotation(FRotator(0.0f, 90.0f * DeltaSeconds, 0.0f));
 	}
 }
@@ -167,6 +171,8 @@ void ADemoComparisonActor::HandleUnscaledTick(float RealDeltaSeconds)
 {
 	if (UnscaledCube)
 	{
+		// A/B 比較の unscaled 側は subsystem から届く実 delta で回し、
+		// Tick() 側との差だけで dilation/pause 耐性を見せる。
 		UnscaledCube->AddLocalRotation(FRotator(0.0f, 90.0f * RealDeltaSeconds, 0.0f));
 	}
 }

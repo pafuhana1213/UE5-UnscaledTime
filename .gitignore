@@ -1,4 +1,4 @@
-# Visual Studio 2015 user specific files
+# Visual Studio user specific files
 .vs/
 
 # Compiled Object files
@@ -41,6 +41,20 @@
 *.VC.db
 *.VC.opendb
 .vsconfig
+
+# Unreal Engine generated files
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+Plugins/**/Binaries/
+Plugins/**/Intermediate/
+Plugins/**/Saved/
+Plugins/**/DerivedDataCache/
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
 
 # Precompiled Assets
 SourceArt/**/*.png

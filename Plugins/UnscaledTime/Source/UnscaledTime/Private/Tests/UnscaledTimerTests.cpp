@@ -1,0 +1,364 @@
+#if WITH_DEV_AUTOMATION_TESTS
+
+#include "Tests/UnscaledTimeTestHelpers.h"
+#include "Tests/UnscaledTimeTestObjects.h"
+
+#include "Misc/AutomationTest.h"
+#include "TimerManager.h"
+#include "UnscaledTimeBlueprintLibrary.h"
+
+namespace UnscaledTimeTimerTests
+{
+	constexpr EAutomationTestFlags TestFlags = EAutomationTestFlags::EditorContext | EAutomationTestFlags::ClientContext | EAutomationTestFlags::ProductFilter;
+
+	UUnscaledTimeTestObject* NewTestObject(UWorld* World)
+	{
+		UUnscaledTimeTestObject* TestObject = NewObject<UUnscaledTimeTestObject>(World);
+		TestObject->Init(World);
+		return TestObject;
+	}
+
+	FTimerDynamicDelegate MakeTimerDelegate(UUnscaledTimeTestObject* TestObject)
+	{
+		FTimerDynamicDelegate Delegate;
+		Delegate.BindUFunction(TestObject, GET_FUNCTION_NAME_CHECKED(UUnscaledTimeTestObject, HandleTimerFired));
+		return Delegate;
+	}
+
+	FUnscaledTimerHandle SetCppTimer(UUnscaledTimeSubsystem* Subsystem, EUnscaledTimeClock Clock, UUnscaledTimeTestObject* TestObject, float Time)
+	{
+		FUnscaledTimerHandle Handle;
+		Handle.Clock = Clock;
+		Subsystem->GetTimerManager(Clock).SetTimer(
+			Handle.Handle,
+			FTimerDelegate::CreateUObject(TestObject, &UUnscaledTimeTestObject::HandleTimerFired),
+			Time,
+			false);
+		return Handle;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnscaledTimerFiresRealTimeUnderDilationTest, "UnscaledTime.Timer.FiresRealTimeUnderDilation", UnscaledTimeTimerTests::TestFlags)
+
+bool FUnscaledTimerFiresRealTimeUnderDilationTest::RunTest(const FString& Parameters)
+{
+	for (float Dilation : { 0.01f, 100.f })
+	{
+		FUnscaledTimeTestFixture Fixture;
+		if (!Fixture.CreateAndBeginPlay(*this))
+		{
+			return false;
+		}
+
+		Fixture.SetDilation(Dilation);
+		UUnscaledTimeTestObject* TestObject = UnscaledTimeTimerTests::NewTestObject(Fixture.World());
+		const FUnscaledTimerHandle Handle = UUnscaledTimeBlueprintLibrary::K2_SetUnscaledTimerDelegate(
+			UnscaledTimeTimerTests::MakeTimerDelegate(TestObject),
+			1.0f,
+			false,
+			true);
+
+		if (!TestTrue(TEXT("Blueprint timer handle is valid"), Handle.IsValid()))
+		{
+			return false;
+		}
+
+		Fixture.ArmPendingTimers();
+		Fixture.PumpFrames(9, 0.1f);
+		Fixture.PumpFrames(1, 0.05f);
+		if (!TestEqual(TEXT("Timer does not fire before 1.0 seconds"), TestObject->FireCount, 0))
+		{
+			return false;
+		}
+
+		Fixture.PumpFrames(1, 0.1f);
+		if (!TestEqual(FString::Printf(TEXT("Timer fires once after 1.0 seconds at dilation %.2f"), Dilation), TestObject->FireCount, 1))
+		{
+			return false;
+		}
+
+		Fixture.PumpFrames(10, 0.1f);
+		if (!TestEqual(TEXT("One-shot timer does not fire again"), TestObject->FireCount, 1))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnscaledTimerFiresWhilePausedTest, "UnscaledTime.Timer.FiresWhilePaused", UnscaledTimeTimerTests::TestFlags)
+
+bool FUnscaledTimerFiresWhilePausedTest::RunTest(const FString& Parameters)
+{
+	FUnscaledTimeTestFixture Fixture;
+	if (!Fixture.CreateAndBeginPlay(*this))
+	{
+		return false;
+	}
+
+	UUnscaledTimeTestObject* RealTimeObject = UnscaledTimeTimerTests::NewTestObject(Fixture.World());
+	UUnscaledTimeTestObject* VanillaObject = UnscaledTimeTimerTests::NewTestObject(Fixture.World());
+
+	FTimerHandle VanillaHandle;
+	Fixture.Subsystem()->GetTimerManager(EUnscaledTimeClock::RealTime).SetTimer(
+		VanillaHandle,
+		FTimerDelegate::CreateUObject(RealTimeObject, &UUnscaledTimeTestObject::HandleTimerFired),
+		1.0f,
+		false);
+
+	FTimerHandle WorldTimerHandle;
+	Fixture.World()->GetTimerManager().SetTimer(
+		WorldTimerHandle,
+		FTimerDelegate::CreateUObject(VanillaObject, &UUnscaledTimeTestObject::HandleTimerFired),
+		1.0f,
+		false);
+
+	Fixture.ArmPendingTimers();
+	Fixture.SetPaused(true);
+	Fixture.PumpFrames(11, 0.1f);
+
+	if (!TestEqual(TEXT("RealTime timer fires while paused"), RealTimeObject->FireCount, 1))
+	{
+		return false;
+	}
+	if (!TestEqual(TEXT("World timer does not fire while paused"), VanillaObject->FireCount, 0))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnscaledTimerUnpausedClockStopsWhilePausedTest, "UnscaledTime.Timer.UnpausedClockStopsWhilePaused", UnscaledTimeTimerTests::TestFlags)
+
+bool FUnscaledTimerUnpausedClockStopsWhilePausedTest::RunTest(const FString& Parameters)
+{
+	FUnscaledTimeTestFixture Fixture;
+	if (!Fixture.CreateAndBeginPlay(*this))
+	{
+		return false;
+	}
+
+	UUnscaledTimeTestObject* TestObject = UnscaledTimeTimerTests::NewTestObject(Fixture.World());
+	FUnscaledTimerHandle Handle = UnscaledTimeTimerTests::SetCppTimer(Fixture.Subsystem(), EUnscaledTimeClock::RealTimeUnpaused, TestObject, 1.0f);
+
+	Fixture.ArmPendingTimers();
+	Fixture.SetPaused(true);
+	const float RemainingBeforePausePump = Fixture.Subsystem()->GetTimerManager(EUnscaledTimeClock::RealTimeUnpaused).GetTimerRemaining(Handle.Handle);
+	Fixture.PumpFrames(5, 0.1f);
+	const float RemainingAfterPausePump = Fixture.Subsystem()->GetTimerManager(EUnscaledTimeClock::RealTimeUnpaused).GetTimerRemaining(Handle.Handle);
+
+	if (!TestTrue(TEXT("Unpaused timer remaining is unchanged while paused"), FMath::IsNearlyEqual(RemainingBeforePausePump, RemainingAfterPausePump, KINDA_SMALL_NUMBER)))
+	{
+		return false;
+	}
+	if (!TestEqual(TEXT("Unpaused timer does not fire while paused"), TestObject->FireCount, 0))
+	{
+		return false;
+	}
+
+	Fixture.SetPaused(false);
+	Fixture.PumpFrames(9, 0.1f);
+	Fixture.PumpFrames(1, 0.05f);
+	if (!TestEqual(TEXT("Unpaused timer does not fire before 1.0 unpaused seconds"), TestObject->FireCount, 0))
+	{
+		return false;
+	}
+
+	Fixture.PumpFrames(1, 0.1f);
+	if (!TestEqual(TEXT("Unpaused timer fires after unpaused real time elapses"), TestObject->FireCount, 1))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnscaledTimerHandleRoutesOperationsTest, "UnscaledTime.Timer.HandleRoutesOperations", UnscaledTimeTimerTests::TestFlags)
+
+bool FUnscaledTimerHandleRoutesOperationsTest::RunTest(const FString& Parameters)
+{
+	FUnscaledTimeTestFixture Fixture;
+	if (!Fixture.CreateAndBeginPlay(*this))
+	{
+		return false;
+	}
+
+	UUnscaledTimeTestObject* RealTimeObject = UnscaledTimeTimerTests::NewTestObject(Fixture.World());
+	UUnscaledTimeTestObject* UnpausedObject = UnscaledTimeTimerTests::NewTestObject(Fixture.World());
+	FUnscaledTimerHandle RealTimeHandle = UnscaledTimeTimerTests::SetCppTimer(Fixture.Subsystem(), EUnscaledTimeClock::RealTime, RealTimeObject, 2.0f);
+	FUnscaledTimerHandle UnpausedHandle = UnscaledTimeTimerTests::SetCppTimer(Fixture.Subsystem(), EUnscaledTimeClock::RealTimeUnpaused, UnpausedObject, 2.0f);
+	Fixture.ArmPendingTimers();
+
+	Fixture.PumpFrames(5, 0.1f);
+	if (!TestTrue(TEXT("RealTime elapsed routes to RealTime manager"), FMath::IsNearlyEqual(UUnscaledTimeBlueprintLibrary::GetUnscaledTimerElapsed(Fixture.World(), RealTimeHandle), 0.5f, KINDA_SMALL_NUMBER)))
+	{
+		return false;
+	}
+	if (!TestTrue(TEXT("Unpaused remaining routes to Unpaused manager"), FMath::IsNearlyEqual(UUnscaledTimeBlueprintLibrary::GetUnscaledTimerRemaining(Fixture.World(), UnpausedHandle), 1.5f, KINDA_SMALL_NUMBER)))
+	{
+		return false;
+	}
+
+	UUnscaledTimeBlueprintLibrary::PauseUnscaledTimer(Fixture.World(), RealTimeHandle);
+	if (!TestTrue(TEXT("Pause routes to RealTime manager"), UUnscaledTimeBlueprintLibrary::IsUnscaledTimerPaused(Fixture.World(), RealTimeHandle)))
+	{
+		return false;
+	}
+
+	Fixture.PumpFrames(5, 0.1f);
+	if (!TestTrue(TEXT("Paused RealTime timer does not advance"), FMath::IsNearlyEqual(UUnscaledTimeBlueprintLibrary::GetUnscaledTimerElapsed(Fixture.World(), RealTimeHandle), 0.5f, KINDA_SMALL_NUMBER)))
+	{
+		return false;
+	}
+	if (!TestTrue(TEXT("Unpaused timer keeps advancing through its own handle"), FMath::IsNearlyEqual(UUnscaledTimeBlueprintLibrary::GetUnscaledTimerElapsed(Fixture.World(), UnpausedHandle), 1.0f, KINDA_SMALL_NUMBER)))
+	{
+		return false;
+	}
+
+	UUnscaledTimeBlueprintLibrary::UnPauseUnscaledTimer(Fixture.World(), RealTimeHandle);
+	if (!TestFalse(TEXT("UnPause routes to RealTime manager"), UUnscaledTimeBlueprintLibrary::IsUnscaledTimerPaused(Fixture.World(), RealTimeHandle)))
+	{
+		return false;
+	}
+
+	Fixture.PumpFrames(3, 0.1f);
+	if (!TestTrue(TEXT("Unpaused RealTime timer resumes advancing"), UUnscaledTimeBlueprintLibrary::GetUnscaledTimerElapsed(Fixture.World(), RealTimeHandle) > 0.5f))
+	{
+		return false;
+	}
+
+	UUnscaledTimeBlueprintLibrary::ClearAndInvalidateUnscaledTimer(Fixture.World(), RealTimeHandle);
+	if (!TestFalse(TEXT("ClearAndInvalidate invalidates handle"), UUnscaledTimeBlueprintLibrary::IsUnscaledTimerHandleValid(RealTimeHandle)))
+	{
+		return false;
+	}
+
+	Fixture.PumpFrames(10, 0.1f);
+	Fixture.PumpFrames(1, 0.001f);
+	if (!TestEqual(TEXT("Cleared RealTime timer does not fire"), RealTimeObject->FireCount, 0))
+	{
+		return false;
+	}
+	if (!TestEqual(TEXT("Unpaused timer fires through its routed manager"), UnpausedObject->FireCount, 1))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnscaledTimerClampRealDeltaTest, "UnscaledTime.Timer.ClampRealDelta", UnscaledTimeTimerTests::TestFlags)
+
+bool FUnscaledTimerClampRealDeltaTest::RunTest(const FString& Parameters)
+{
+	FScopedUnscaledTimeSettings Settings;
+	Settings.SetMaxRealDeltaSeconds(0.5f);
+
+	FUnscaledTimeTestFixture Fixture;
+	if (!Fixture.CreateAndBeginPlay(*this))
+	{
+		return false;
+	}
+
+	Fixture.PumpFrames(1, 10.0f);
+
+	if (!TestTrue(TEXT("Last real delta is clamped"), FMath::IsNearlyEqual(Fixture.Subsystem()->GetLastRealDeltaSeconds(), 0.5f, KINDA_SMALL_NUMBER)))
+	{
+		return false;
+	}
+	if (!TestTrue(TEXT("RealTime clock advances by clamped delta"), FMath::IsNearlyEqual(Fixture.Subsystem()->GetUnscaledTimeSeconds(EUnscaledTimeClock::RealTime), 0.5, KINDA_SMALL_NUMBER)))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnscaledTimerFramesUseReferenceFrameRateTest, "UnscaledTime.Timer.FramesUseReferenceFrameRate", UnscaledTimeTimerTests::TestFlags)
+
+bool FUnscaledTimerFramesUseReferenceFrameRateTest::RunTest(const FString& Parameters)
+{
+	FScopedUnscaledTimeSettings Settings;
+
+	{
+		Settings.SetReferenceFrameRate(60.0f);
+		if (!TestTrue(TEXT("30 frames at 60fps converts to 0.5 seconds"), FMath::IsNearlyEqual(UUnscaledTimeBlueprintLibrary::UnscaledFramesToSeconds(30), 0.5f, KINDA_SMALL_NUMBER)))
+		{
+			return false;
+		}
+		if (!TestEqual(TEXT("0.5 seconds at 60fps converts to 30 frames"), UUnscaledTimeBlueprintLibrary::UnscaledSecondsToFrames(0.5f), 30))
+		{
+			return false;
+		}
+
+		FUnscaledTimeTestFixture Fixture;
+		if (!Fixture.CreateAndBeginPlay(*this))
+		{
+			return false;
+		}
+
+		UUnscaledTimeTestObject* TestObject = UnscaledTimeTimerTests::NewTestObject(Fixture.World());
+		UUnscaledTimeBlueprintLibrary::K2_SetUnscaledTimerDelegateByFrames(
+			UnscaledTimeTimerTests::MakeTimerDelegate(TestObject),
+			30,
+			false,
+			true);
+
+		Fixture.ArmPendingTimers();
+		Fixture.PumpFrames(4, 0.1f);
+		Fixture.PumpFrames(1, 0.05f);
+		if (!TestEqual(TEXT("30-frame timer at 60fps does not fire before 0.5s"), TestObject->FireCount, 0))
+		{
+			return false;
+		}
+		Fixture.PumpFrames(1, 0.1f);
+		if (!TestEqual(TEXT("30-frame timer at 60fps fires after 0.5s"), TestObject->FireCount, 1))
+		{
+			return false;
+		}
+	}
+
+	{
+		Settings.SetReferenceFrameRate(30.0f);
+		if (!TestTrue(TEXT("30 frames at 30fps converts to 1.0 seconds"), FMath::IsNearlyEqual(UUnscaledTimeBlueprintLibrary::UnscaledFramesToSeconds(30), 1.0f, KINDA_SMALL_NUMBER)))
+		{
+			return false;
+		}
+		if (!TestEqual(TEXT("1.0 second at 30fps converts to 30 frames"), UUnscaledTimeBlueprintLibrary::UnscaledSecondsToFrames(1.0f), 30))
+		{
+			return false;
+		}
+
+		FUnscaledTimeTestFixture Fixture;
+		if (!Fixture.CreateAndBeginPlay(*this))
+		{
+			return false;
+		}
+
+		UUnscaledTimeTestObject* TestObject = UnscaledTimeTimerTests::NewTestObject(Fixture.World());
+		UUnscaledTimeBlueprintLibrary::K2_SetUnscaledTimerDelegateByFrames(
+			UnscaledTimeTimerTests::MakeTimerDelegate(TestObject),
+			30,
+			false,
+			true);
+
+		Fixture.ArmPendingTimers();
+		Fixture.PumpFrames(9, 0.1f);
+		Fixture.PumpFrames(1, 0.05f);
+		if (!TestEqual(TEXT("30-frame timer at 30fps does not fire before 1.0s"), TestObject->FireCount, 0))
+		{
+			return false;
+		}
+		Fixture.PumpFrames(1, 0.1f);
+		if (!TestEqual(TEXT("30-frame timer at 30fps fires after 1.0s"), TestObject->FireCount, 1))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+#endif // WITH_DEV_AUTOMATION_TESTS

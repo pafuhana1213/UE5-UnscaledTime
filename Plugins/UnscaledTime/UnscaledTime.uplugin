@@ -1,0 +1,28 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "UnscaledTime",
+	"Description": "Real-time (wall-clock) Delay / Timer / Tick that ignore global time dilation and game pause.",
+	"Category": "Gameplay",
+	"CanContainContent": false,
+	"EngineVersion": "5.8.0",
+	"Modules": [
+		{
+			"Name": "UnscaledTime",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "UnscaledTimeGAS",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "GameplayAbilities",
+			"Enabled": true
+		}
+	]
+}

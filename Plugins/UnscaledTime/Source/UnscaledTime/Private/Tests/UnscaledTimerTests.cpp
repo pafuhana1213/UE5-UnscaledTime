@@ -249,6 +249,82 @@ bool FUnscaledTimerHandleRoutesOperationsTest::RunTest(const FString& Parameters
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnscaledTimerByEventUniqueAcrossClocksTest, "UnscaledTime.Timer.ByEventUniqueAcrossClocks", UnscaledTimeTimerTests::TestFlags)
+
+bool FUnscaledTimerByEventUniqueAcrossClocksTest::RunTest(const FString& Parameters)
+{
+	FUnscaledTimeTestFixture Fixture;
+	if (!Fixture.CreateAndBeginPlay(*this))
+	{
+		return false;
+	}
+
+	UUnscaledTimeTestObject* TestObject = UnscaledTimeTimerTests::NewTestObject(Fixture.World());
+	FTimerDynamicDelegate Delegate = UnscaledTimeTimerTests::MakeTimerDelegate(TestObject);
+
+	const FUnscaledTimerHandle FirstHandle = UUnscaledTimeBlueprintLibrary::K2_SetUnscaledTimerDelegate(
+		Delegate,
+		1.0f,
+		true,
+		true);
+	Fixture.ArmPendingTimers();
+	const FUnscaledTimerHandle SecondHandle = UUnscaledTimeBlueprintLibrary::K2_SetUnscaledTimerDelegate(
+		Delegate,
+		1.0f,
+		true,
+		false);
+	Fixture.ArmPendingTimers();
+
+	if (!TestFalse(TEXT("Re-arming by event clears the opposite RealTime clock timer"), Fixture.Subsystem()->GetTimerManager(EUnscaledTimeClock::RealTime).TimerExists(FirstHandle.Handle)))
+	{
+		return false;
+	}
+	if (!TestTrue(TEXT("Re-arming by event creates one timer on the selected unpaused clock"), Fixture.Subsystem()->GetTimerManager(EUnscaledTimeClock::RealTimeUnpaused).TimerExists(SecondHandle.Handle)))
+	{
+		return false;
+	}
+
+	Fixture.SetPaused(true);
+	Fixture.PumpFrames(11, 0.1f);
+	if (!TestEqual(TEXT("By-event timer follows second unpaused registration and does not fire while paused"), TestObject->FireCount, 0))
+	{
+		return false;
+	}
+
+	Fixture.SetPaused(false);
+	Fixture.PumpFrames(9, 0.1f);
+	Fixture.PumpFrames(1, 0.05f);
+	if (!TestEqual(TEXT("By-event timer does not fire before second registration deadline"), TestObject->FireCount, 0))
+	{
+		return false;
+	}
+
+	Fixture.PumpFrames(1, 0.1f);
+	if (!TestEqual(TEXT("By-event timer fires once on the second registration clock"), TestObject->FireCount, 1))
+	{
+		return false;
+	}
+
+	UUnscaledTimeBlueprintLibrary::ClearAndInvalidateUnscaledTimerByEvent(Delegate);
+	if (!TestFalse(TEXT("By-event clear removes RealTime timer"), Fixture.Subsystem()->GetTimerManager(EUnscaledTimeClock::RealTime).K2_FindDynamicTimerHandle(Delegate).IsValid()))
+	{
+		return false;
+	}
+	if (!TestFalse(TEXT("By-event clear removes unpaused timer"), Fixture.Subsystem()->GetTimerManager(EUnscaledTimeClock::RealTimeUnpaused).K2_FindDynamicTimerHandle(Delegate).IsValid()))
+	{
+		return false;
+	}
+
+	const int32 FireCountAfterClear = TestObject->FireCount;
+	Fixture.PumpFrames(12, 0.1f);
+	if (!TestEqual(TEXT("By-event clear prevents further looping timer fires"), TestObject->FireCount, FireCountAfterClear))
+	{
+		return false;
+	}
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnscaledTimerClampRealDeltaTest, "UnscaledTime.Timer.ClampRealDelta", UnscaledTimeTimerTests::TestFlags)
 
 bool FUnscaledTimerClampRealDeltaTest::RunTest(const FString& Parameters)

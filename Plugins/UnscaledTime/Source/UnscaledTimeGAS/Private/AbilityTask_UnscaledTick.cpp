@@ -28,6 +28,7 @@ void UAbilityTask_UnscaledTick::Activate()
 	if (!Subsystem)
 	{
 		UE_LOG(LogUnscaledTimeGAS, Warning, TEXT("UnscaledTick could not find UUnscaledTimeSubsystem for world %s. This ability task will not tick."), *GetNameSafe(World));
+		EndTask();
 		return;
 	}
 

@@ -423,6 +423,15 @@ FUnscaledTimerHandle UUnscaledTimeBlueprintLibrary::SetUnscaledTimerDelegateInte
 			}
 
 			const EUnscaledTimeClock Clock = bTickWhilePaused ? EUnscaledTimeClock::RealTime : EUnscaledTimeClock::RealTimeUnpaused;
+			const EUnscaledTimeClock OppositeClock = bTickWhilePaused ? EUnscaledTimeClock::RealTimeUnpaused : EUnscaledTimeClock::RealTime;
+			FTimerManager& OppositeTimerManager = Subsystem->GetTimerManager(OppositeClock);
+			// Dynamic delegate timers are unique across both unscaled clocks, matching vanilla timer behavior.
+			FTimerHandle OppositeHandle = OppositeTimerManager.K2_FindDynamicTimerHandle(Delegate);
+			if (OppositeHandle.IsValid())
+			{
+				OppositeTimerManager.ClearTimer(OppositeHandle);
+			}
+
 			FTimerManager& TimerManager = Subsystem->GetTimerManager(Clock);
 			UnscaledHandle.Handle = TimerManager.K2_FindDynamicTimerHandle(Delegate);
 			UnscaledHandle.Clock = Clock;

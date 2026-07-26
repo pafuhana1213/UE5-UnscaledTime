@@ -31,6 +31,13 @@ void UUnscaledTickComponent::Deactivate()
 	Super::Deactivate();
 }
 
+void UUnscaledTickComponent::OnUnregister()
+{
+	UnregisterTickDelegate();
+
+	Super::OnUnregister();
+}
+
 void UUnscaledTickComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	UnregisterTickDelegate();

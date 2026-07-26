@@ -26,6 +26,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Activate(bool bReset = false) override;
 	virtual void Deactivate() override;
+	virtual void OnUnregister() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override;
 

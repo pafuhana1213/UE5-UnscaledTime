@@ -47,9 +47,9 @@ struct FUnscaledTimeTestFixture
 		SetPaused(false);
 	}
 
-	bool CreateAndBeginPlay(FAutomationTestBase& Test)
+	bool CreateAndBeginPlay(FAutomationTestBase& Test, EWorldType::Type WorldType = EWorldType::Game)
 	{
-		const bool bCreated = WorldWrapper.CreateTestWorld(EWorldType::Game);
+		const bool bCreated = WorldWrapper.CreateTestWorld(WorldType);
 		const bool bBegunPlay = bCreated && WorldWrapper.BeginPlayInTestWorld();
 		// Warm-up tick with zero delta: the subsystem's FTimerManagers can already have
 		// LastTickedFrame == GFrameCounter for the engine frame that created the world,
@@ -60,7 +60,8 @@ struct FUnscaledTimeTestFixture
 			WorldWrapper.TickTestWorld(0.f);
 		}
 		ForwardErrors(Test);
-		return bCreated && bBegunPlay && World() && Subsystem();
+		const bool bRequiresSubsystem = WorldType == EWorldType::Game || WorldType == EWorldType::PIE;
+		return bCreated && bBegunPlay && World() && (!bRequiresSubsystem || Subsystem());
 	}
 
 	UWorld* World() const

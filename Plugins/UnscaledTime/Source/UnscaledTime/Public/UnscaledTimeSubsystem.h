@@ -39,17 +39,16 @@ private:
 	struct FUnscaledDelayKey
 	{
 		FWeakObjectPtr CallbackTarget;
-		const void* RawTarget = nullptr;
 		int32 UUID = INDEX_NONE;
 
 		bool operator==(const FUnscaledDelayKey& Other) const
 		{
-			return RawTarget == Other.RawTarget && UUID == Other.UUID;
+			return CallbackTarget.HasSameIndexAndSerialNumber(Other.CallbackTarget) && UUID == Other.UUID;
 		}
 
 		friend uint32 GetTypeHash(const FUnscaledDelayKey& Key)
 		{
-			return HashCombine(PointerHash(Key.RawTarget), GetTypeHash(Key.UUID));
+			return HashCombine(GetTypeHash(Key.CallbackTarget), ::GetTypeHash(Key.UUID));
 		}
 	};
 

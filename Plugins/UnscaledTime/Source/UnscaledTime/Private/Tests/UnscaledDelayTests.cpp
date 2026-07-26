@@ -245,4 +245,154 @@ bool FUnscaledTickComponentAccumulatesRealDeltaTest::RunTest(const FString& Para
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnscaledTickComponentRegistrationCyclingTest, "UnscaledTime.TickComponent.RegistrationCycling", UnscaledTimeDelayTests::TestFlags)
+
+bool FUnscaledTickComponentRegistrationCyclingTest::RunTest(const FString& Parameters)
+{
+	FUnscaledTimeTestFixture Fixture;
+	if (!Fixture.CreateAndBeginPlay(*this))
+	{
+		return false;
+	}
+
+	AActor* TickActor = Fixture.World()->SpawnActor<AActor>();
+	UUnscaledTickComponent* TickComponent = UnscaledTimeDelayTests::AddUnscaledTickComponent(TickActor, true);
+	UUnscaledTimeTestObject* TickObject = UnscaledTimeDelayTests::NewTestObject(Fixture.World());
+	TickComponent->OnUnscaledTick.AddDynamic(TickObject, &UUnscaledTimeTestObject::HandleUnscaledTick);
+
+	Fixture.PumpFrames(3, 0.1f);
+	if (!TestEqual(TEXT("Registered tick component ticks once per pump"), TickObject->TickCount, 3))
+	{
+		return false;
+	}
+	if (!TestTrue(TEXT("Registered tick component accumulates per-pump delta"), FMath::IsNearlyEqual(TickObject->AccumulatedRealDeltaSeconds, 0.3f, KINDA_SMALL_NUMBER)))
+	{
+		return false;
+	}
+
+	TickComponent->UnregisterComponent();
+	Fixture.PumpFrames(3, 0.1f);
+	if (!TestEqual(TEXT("Unregistered tick component stops receiving subsystem ticks"), TickObject->TickCount, 3))
+	{
+		return false;
+	}
+	if (!TestTrue(TEXT("Unregistered tick component accumulation does not change"), FMath::IsNearlyEqual(TickObject->AccumulatedRealDeltaSeconds, 0.3f, KINDA_SMALL_NUMBER)))
+	{
+		return false;
+	}
+
+	TickComponent->RegisterComponent();
+	TickComponent->Activate(true);
+	Fixture.PumpFrames(3, 0.1f);
+	if (!TestEqual(TEXT("Re-registered tick component resumes once per pump"), TickObject->TickCount, 6))
+	{
+		return false;
+	}
+	if (!TestTrue(TEXT("Re-registered tick component accumulation resumes"), FMath::IsNearlyEqual(TickObject->AccumulatedRealDeltaSeconds, 0.6f, KINDA_SMALL_NUMBER)))
+	{
+		return false;
+	}
+
+	TickComponent->Deactivate();
+	Fixture.PumpFrames(2, 0.1f);
+	if (!TestEqual(TEXT("Deactivated tick component stops receiving subsystem ticks"), TickObject->TickCount, 6))
+	{
+		return false;
+	}
+
+	TickComponent->Activate(true);
+	TickComponent->Activate(true);
+	Fixture.PumpFrames(2, 0.1f);
+	if (!TestEqual(TEXT("Repeated activation does not double-subscribe"), TickObject->TickCount, 8))
+	{
+		return false;
+	}
+	if (!TestTrue(TEXT("Repeated activation accumulates each pump exactly once"), FMath::IsNearlyEqual(TickObject->AccumulatedRealDeltaSeconds, 0.8f, KINDA_SMALL_NUMBER)))
+	{
+		return false;
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnscaledDelayRetriggerClockChangeTest, "UnscaledTime.Delay.RetriggerClockChange", UnscaledTimeDelayTests::TestFlags)
+
+bool FUnscaledDelayRetriggerClockChangeTest::RunTest(const FString& Parameters)
+{
+	{
+		FUnscaledTimeTestFixture Fixture;
+		if (!Fixture.CreateAndBeginPlay(*this))
+		{
+			return false;
+		}
+
+		UUnscaledTimeTestObject* TestObject = UnscaledTimeDelayTests::NewTestObject(Fixture.World());
+		Fixture.Subsystem()->RegisterUnscaledDelay(1.0f, true, true, UnscaledTimeDelayTests::MakeLatentInfo(TestObject, 505, 5001));
+		Fixture.ArmPendingTimers();
+		Fixture.PumpFrames(4, 0.1f);
+		Fixture.Subsystem()->RegisterUnscaledDelay(1.0f, true, false, UnscaledTimeDelayTests::MakeLatentInfo(TestObject, 505, 5002));
+		Fixture.ArmPendingTimers();
+
+		Fixture.SetPaused(true);
+		Fixture.PumpFrames(11, 0.1f);
+		if (!TestEqual(TEXT("RealTime to unpaused retrigger does not fire while paused"), TestObject->LatentResumeCount, 0))
+		{
+			return false;
+		}
+
+		Fixture.SetPaused(false);
+		Fixture.PumpFrames(9, 0.1f);
+		Fixture.PumpFrames(1, 0.05f);
+		if (!TestEqual(TEXT("RealTime to unpaused retrigger does not fire before reset unpaused deadline"), TestObject->LatentResumeCount, 0))
+		{
+			return false;
+		}
+
+		Fixture.PumpFrames(1, 0.1f);
+		if (!TestEqual(TEXT("RealTime to unpaused retrigger fires after unpause at reset deadline"), TestObject->LatentResumeCount, 1))
+		{
+			return false;
+		}
+		if (!TestEqual(TEXT("RealTime to unpaused retrigger uses latest linkage"), TestObject->LastLatentLinkage, 5002))
+		{
+			return false;
+		}
+	}
+
+	{
+		FUnscaledTimeTestFixture Fixture;
+		if (!Fixture.CreateAndBeginPlay(*this))
+		{
+			return false;
+		}
+
+		UUnscaledTimeTestObject* TestObject = UnscaledTimeDelayTests::NewTestObject(Fixture.World());
+		Fixture.Subsystem()->RegisterUnscaledDelay(1.0f, true, false, UnscaledTimeDelayTests::MakeLatentInfo(TestObject, 606, 6001));
+		Fixture.ArmPendingTimers();
+		Fixture.PumpFrames(4, 0.1f);
+
+		Fixture.SetPaused(true);
+		Fixture.Subsystem()->RegisterUnscaledDelay(1.0f, true, true, UnscaledTimeDelayTests::MakeLatentInfo(TestObject, 606, 6002));
+		Fixture.ArmPendingTimers();
+		Fixture.PumpFrames(9, 0.1f);
+		Fixture.PumpFrames(1, 0.05f);
+		if (!TestEqual(TEXT("Unpaused to RealTime retrigger does not fire before reset paused deadline"), TestObject->LatentResumeCount, 0))
+		{
+			return false;
+		}
+
+		Fixture.PumpFrames(1, 0.1f);
+		if (!TestEqual(TEXT("Unpaused to RealTime retrigger fires while paused"), TestObject->LatentResumeCount, 1))
+		{
+			return false;
+		}
+		if (!TestEqual(TEXT("Unpaused to RealTime retrigger uses latest linkage"), TestObject->LastLatentLinkage, 6002))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

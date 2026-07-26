@@ -107,10 +107,19 @@ void UUnscaledTimeTickTestAbility::EndFromTest()
 	EndAbility(GetCurrentAbilitySpecHandle(), GetCurrentActorInfo(), GetCurrentActivationInfo(), false, false);
 }
 
+bool UUnscaledTimeTickTestAbility::IsTickTaskActiveForTest() const
+{
+	return TickTask && TickTask->IsActive();
+}
+
+bool UUnscaledTimeTickTestAbility::IsTickTaskFinishedForTest() const
+{
+	return TickTask && TickTask->IsFinished();
+}
+
 void UUnscaledTimeTickTestAbility::HandleUnscaledTick(float RealDeltaSeconds)
 {
 	++TickCount;
 	LastRealDeltaSeconds = RealDeltaSeconds;
 	AccumulatedRealDeltaSeconds += RealDeltaSeconds;
 }
-

@@ -173,9 +173,10 @@ void UUnscaledTimeSubsystem::RegisterUnscaledDelay(float DurationSeconds, bool b
 	const FUnscaledDelayKey Key
 	{
 		FWeakObjectPtr(LatentInfo.CallbackTarget),
-		LatentInfo.CallbackTarget,
 		LatentInfo.UUID
 	};
+
+	const EUnscaledTimeClock Clock = bTickWhilePaused ? EUnscaledTimeClock::RealTime : EUnscaledTimeClock::RealTimeUnpaused;
 
 	if (FPendingUnscaledDelay* ExistingDelay = PendingDelays.Find(Key))
 	{
@@ -184,12 +185,23 @@ void UUnscaledTimeSubsystem::RegisterUnscaledDelay(float DurationSeconds, bool b
 			return;
 		}
 
-		FTimerManager& TimerManager = GetTimerManager(ExistingDelay->Clock);
 		const FTimerDelegate TimerDelegate = FTimerDelegate::CreateUObject(this, &UUnscaledTimeSubsystem::OnDelayExpired, Key);
+		FTimerManager& OldTimerManager = GetTimerManager(ExistingDelay->Clock);
+		FTimerManager& TimerManager = GetTimerManager(Clock);
+
+		if (ExistingDelay->Clock != Clock)
+		{
+			OldTimerManager.ClearTimer(ExistingDelay->TimerHandle);
+			ExistingDelay->TimerHandle.Invalidate();
+			ExistingDelay->Clock = Clock;
+		}
 
 		if (DurationSeconds <= 0.f)
 		{
-			TimerManager.ClearTimer(ExistingDelay->TimerHandle);
+			if (ExistingDelay->TimerHandle.IsValid())
+			{
+				TimerManager.ClearTimer(ExistingDelay->TimerHandle);
+			}
 			ExistingDelay->TimerHandle = TimerManager.SetTimerForNextTick(TimerDelegate);
 		}
 		else
@@ -203,7 +215,6 @@ void UUnscaledTimeSubsystem::RegisterUnscaledDelay(float DurationSeconds, bool b
 		return;
 	}
 
-	const EUnscaledTimeClock Clock = bTickWhilePaused ? EUnscaledTimeClock::RealTime : EUnscaledTimeClock::RealTimeUnpaused;
 	FTimerManager& TimerManager = GetTimerManager(Clock);
 	const FTimerDelegate TimerDelegate = FTimerDelegate::CreateUObject(this, &UUnscaledTimeSubsystem::OnDelayExpired, Key);
 

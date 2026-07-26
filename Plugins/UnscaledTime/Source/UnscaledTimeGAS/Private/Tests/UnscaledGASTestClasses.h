@@ -72,6 +72,8 @@ public:
 		bool bWasCancelled) override;
 
 	void EndFromTest();
+	bool IsTickTaskActiveForTest() const;
+	bool IsTickTaskFinishedForTest() const;
 
 private:
 	UPROPERTY()

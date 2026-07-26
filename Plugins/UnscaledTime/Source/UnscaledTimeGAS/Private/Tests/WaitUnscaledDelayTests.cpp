@@ -165,4 +165,67 @@ bool FAbilityTaskUnscaledTickRealDeltaTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAbilityTaskUnscaledTickNoSubsystemEndsTaskTest, "UnscaledTime.GAS.UnscaledTick.NoSubsystemEndsTask", UnscaledTimeGASTests::TestFlags)
+
+bool FAbilityTaskUnscaledTickNoSubsystemEndsTaskTest::RunTest(const FString& Parameters)
+{
+	FUnscaledTimeTestFixture Fixture;
+	if (!Fixture.CreateAndBeginPlay(*this, EWorldType::GamePreview))
+	{
+		return false;
+	}
+
+	if (!TestNull(TEXT("GamePreview world does not create UUnscaledTimeSubsystem"), Fixture.World()->GetSubsystem<UUnscaledTimeSubsystem>()))
+	{
+		return false;
+	}
+
+	AActor* Actor = Fixture.World()->SpawnActor<AActor>();
+	UAbilitySystemComponent* AbilitySystemComponent = UnscaledTimeGASTests::AddAbilitySystemComponent(Actor);
+
+	UUnscaledTimeTickTestAbility::Reset();
+	const FGameplayAbilitySpecHandle AbilityHandle = AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(UUnscaledTimeTickTestAbility::StaticClass(), 1, INDEX_NONE));
+
+	AddExpectedError(TEXT("UnscaledTick could not find UUnscaledTimeSubsystem"), EAutomationExpectedErrorFlags::Contains, 1);
+	if (!TestTrue(TEXT("UnscaledTick ability activates without subsystem"), AbilitySystemComponent->TryActivateAbility(AbilityHandle)))
+	{
+		return false;
+	}
+	if (!TestTrue(TEXT("UnscaledTick no-subsystem ability reached ActivateAbility"), UUnscaledTimeTickTestAbility::bActivated))
+	{
+		return false;
+	}
+	if (!TestTrue(TEXT("UnscaledTick no-subsystem ability instance is available"), UUnscaledTimeTickTestAbility::LastInstance.IsValid()))
+	{
+		return false;
+	}
+	if (!TestFalse(TEXT("UnscaledTick no-subsystem task is not active"), UUnscaledTimeTickTestAbility::LastInstance->IsTickTaskActiveForTest()))
+	{
+		return false;
+	}
+	if (!TestTrue(TEXT("UnscaledTick no-subsystem task is finished"), UUnscaledTimeTickTestAbility::LastInstance->IsTickTaskFinishedForTest()))
+	{
+		return false;
+	}
+
+	Fixture.PumpFrames(3, 0.1f);
+	if (!TestEqual(TEXT("UnscaledTick no-subsystem task does not register a tick delegate"), UUnscaledTimeTickTestAbility::TickCount, 0))
+	{
+		return false;
+	}
+
+	UUnscaledTimeTickTestAbility::LastInstance->EndFromTest();
+	const FGameplayAbilitySpec* AbilitySpec = AbilitySystemComponent->FindAbilitySpecFromHandle(AbilityHandle);
+	if (!TestTrue(TEXT("UnscaledTick no-subsystem ability spec remains findable"), AbilitySpec != nullptr))
+	{
+		return false;
+	}
+	if (!TestFalse(TEXT("UnscaledTick no-subsystem ability is no longer active after cleanup"), AbilitySpec->IsActive()))
+	{
+		return false;
+	}
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
